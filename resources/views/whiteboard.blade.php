@@ -623,20 +623,30 @@ setInterval(() => {
     if (!canvasData) return;
 
     try {
-        // Use Konva.Stage.create alias (required per exam AC-24)
-        const restoredStage = Konva.Stage.create(canvasData, 'canvas-container');
+        // Create a temporary off-screen container so Konva.Stage.create
+        // doesn't conflict with the live #canvas-container stage
+        const tempDiv = document.createElement('div');
+        tempDiv.style.cssText = 'position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;visibility:hidden;';
+        document.body.appendChild(tempDiv);
 
-        // Extract layers from restored stage, re-add to working stage
+        // Use Konva.Stage.create alias (required per exam AC-24)
+        const restoredStage = Konva.Stage.create(canvasData, tempDiv);
+
+        // Snapshot children to avoid live-array mutation during iteration
         restoredStage.getLayers().forEach(restoredLayer => {
-            restoredLayer.getChildren().forEach(shape => {
+            const shapes = [...restoredLayer.getChildren()];
+            shapes.forEach(shape => {
                 if (shape.className === 'Transformer') return;
+                shape.moveTo(layer);
                 shape.draggable(true);
                 makeSelectable(shape);
-                layer.add(shape);
             });
         });
 
+        // Safe to destroy now — shapes already moved to our working layer
         restoredStage.destroy();
+        document.body.removeChild(tempDiv);
+
         layer.add(transformer); // keep transformer on top
         layer.batchDraw();
         updateSaveStatus('saved');
