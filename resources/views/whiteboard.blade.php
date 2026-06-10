@@ -82,10 +82,13 @@
         </div>
 
         <!-- Stroke Width Slider -->
-        <div style="display:flex;flex-direction:column;align-items:center;gap:4px;width:100%;margin-top:6px;" title="Stroke Width">
-            <span id="stroke-val-display" style="font-size:11px;font-weight:700;color:#64748b;font-family:'Inter',sans-serif;">4px</span>
-            <input type="range" id="stroke-slider" min="1" max="40" value="4"
-                style="width:36px;height:4px;background:#cbd5e1;border-radius:2px;appearance:none;outline:none;cursor:pointer;">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;width:100%;margin-top:4px;" title="Stroke Width (drag to adjust)">
+            <span id="stroke-val-display" style="font-size:10px;font-weight:700;color:#64748b;font-family:'Inter',sans-serif;letter-spacing:0.02em;">4px</span>
+            <div style="height:80px;display:flex;align-items:center;justify-content:center;">
+                <input type="range" id="stroke-slider" min="1" max="40" value="4"
+                    title="Stroke Width"
+                    style="width:70px;height:4px;cursor:pointer;writing-mode:vertical-lr;direction:rtl;appearance:slider-vertical;-webkit-appearance:slider-vertical;accent-color:#6366f1;outline:none;border:none;background:transparent;">
+            </div>
         </div>
     </div>
 
