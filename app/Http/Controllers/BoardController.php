@@ -101,22 +101,10 @@ class BoardController extends Controller
     }
 
     /**
-     * Home redirect to the latest board or auto-create a default board.
+     * Show the landing page.
      */
     public function home()
     {
-        $latestBoard = Board::orderBy('updated_at', 'desc')->first();
-
-        if ($latestBoard) {
-            return redirect()->route('boards.show', $latestBoard->id);
-        }
-
-        // Create a default board if none exist
-        $defaultBoard = Board::create([
-            'name' => 'Default Board',
-            'canvas_data' => null
-        ]);
-
-        return redirect()->route('boards.show', $defaultBoard->id);
+        return view('landing');
     }
 }
