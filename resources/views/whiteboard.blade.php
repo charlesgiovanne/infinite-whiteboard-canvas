@@ -97,9 +97,9 @@
         @php
         $tools = [
             ['id'=>'select',    'icon'=>'mouse-pointer-2',  'label'=>'Select (V)'],
+            ['id'=>'hand',      'icon'=>'hand',             'label'=>'Pan / Move (H)'],
             ['id'=>'draw',      'icon'=>'pen-line',         'label'=>'Draw (D)'],
             ['id'=>'eraser',    'icon'=>'eraser',           'label'=>'Eraser (X)'],
-            ['id'=>'fill',      'icon'=>'paint-bucket',     'label'=>'Fill (F)'],
             ['id'=>'rect',      'icon'=>'square',           'label'=>'Rectangle (R)'],
             ['id'=>'ellipse',   'icon'=>'circle',           'label'=>'Ellipse (E)'],
             ['id'=>'line',      'icon'=>'minus',            'label'=>'Line (L)'],
@@ -203,14 +203,13 @@
 
 <!-- ═══════════════════════════════════════ JAVASCRIPT ═══════════════════════════════════════ -->
 <script>
-// ════════════════════════════════ INIT ════════════════════════════════
 const BOARD_ID = {{ $board->id }};
 let currentColor   = '#6366f1';
 let currentStroke  = 4;
 let activeTool     = 'select';
 let isDirty        = false;  // tracks unsaved changes
-let undoStack      = [];     // undo history (JSON snapshots)
-let redoStack      = [];     // redo history
+let historyList    = [];     // history snapshots
+let historyIndex   = -1;     // current active history index
 let gridVisible    = false;  // grid overlay toggle
 const GRID_SIZE    = 30;     // grid cell size in px
 
@@ -264,11 +263,20 @@ function setActiveTool(tool) {
         btn.style.color       = isActive ? '#6366f1' : '#64748b';
     });
 
-    // Update stage cursor and draggability
-    const isPannable = (tool === 'select');
-    stage.container().style.cursor = (tool === 'draw' || tool === 'eraser' || tool === 'line' || tool === 'arrow')
-        ? 'crosshair'
-        : (tool === 'text' ? 'text' : (tool === 'fill' ? 'pointer' : (isPannable ? 'default' : 'crosshair')));
+    // Update stage cursor
+    const cursors = {
+        select:  'default',
+        hand:    'grab',
+        draw:    'crosshair',
+        eraser:  'crosshair',
+        line:    'crosshair',
+        arrow:   'crosshair',
+        rect:    'crosshair',
+        ellipse: 'crosshair',
+        fill:    'cell',
+        text:    'text',
+    };
+    stage.container().style.cursor = cursors[tool] || 'default';
 
     if (tool !== 'select') {
         transformer.nodes([]);
@@ -423,18 +431,32 @@ function applyStrokeToSelected(val) {
 setActiveTool('select');
 setStrokeWidth(4);
 
-// Keyboard shortcuts
+// ── Space-bar temporary pan ───────────────────────────────────────────────────
+let spaceHeld      = false;
+let toolBeforeSpace = null;
+
 document.addEventListener('keydown', e => {
     if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
+
+    // Space = temporary hand/pan mode
+    if (e.code === 'Space' && !spaceHeld) {
+        e.preventDefault();
+        spaceHeld = true;
+        toolBeforeSpace = activeTool;
+        stage.container().style.cursor = 'grab';
+        return;
+    }
+
     // Ctrl+Z = Undo, Ctrl+Y or Ctrl+Shift+Z = Redo
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); undoAction(); return; }
     if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) { e.preventDefault(); redoAction(); return; }
     if (e.ctrlKey || e.metaKey) return; // ignore other Ctrl combos
     switch(e.key.toLowerCase()) {
         case 'v': setActiveTool('select'); break;
+        case 'h': setActiveTool('hand');   break;
         case 'd': setActiveTool('draw');   break;
         case 'x': setActiveTool('eraser'); break;
-        case 'f': setActiveTool('fill');   break;
+
         case 'r': setActiveTool('rect');   break;
         case 'e': setActiveTool('ellipse');break;
         case 'l': setActiveTool('line');   break;
@@ -447,32 +469,74 @@ document.addEventListener('keydown', e => {
     }
 });
 
+document.addEventListener('keyup', e => {
+    if (e.code === 'Space' && spaceHeld) {
+        spaceHeld = false;
+        isPanning = false;
+        // Restore the cursor for the real active tool
+        const cursors = { select:'default', hand:'grab', draw:'crosshair', eraser:'crosshair',
+                          line:'crosshair', arrow:'crosshair', rect:'crosshair', ellipse:'crosshair',
+                          text:'text' };
+        stage.container().style.cursor = cursors[toolBeforeSpace] || 'default';
+        toolBeforeSpace = null;
+    }
+});
+
 // ════════════════════════════════ PAN & ZOOM ════════════════════════════════
-let isPanning = false;
-let panStart  = { x: 0, y: 0 };
+let isPanning  = false;
+let panStart   = { x: 0, y: 0 };
+
+/**
+ * Returns true when a pan should start:
+ *  - Hand tool active (click anywhere)
+ *  - Space held (temporary pan from any tool)
+ *  - Middle mouse button
+ *  - Select tool + clicking on empty canvas background
+ */
+function shouldStartPan(e, nativeEvt) {
+    if (spaceHeld)                                     return true;
+    if (nativeEvt && nativeEvt.button === 1)           return true; // middle mouse
+    if (activeTool === 'hand')                         return true;
+    if (activeTool === 'select' && e.target === stage) return true;
+    return false;
+}
 
 stage.on('mousedown', e => {
-    if (activeTool !== 'select') return;
-    if (e.target !== stage) return; // only pan on background
+    if (!shouldStartPan(e, e.evt)) return;
+    e.evt.preventDefault();
     isPanning = true;
-    panStart = stage.getPointerPosition();
+    panStart  = stage.getPointerPosition();
     stage.container().style.cursor = 'grabbing';
 });
 
 stage.on('mousemove', () => {
     if (!isPanning) return;
     const pos = stage.getPointerPosition();
+    if (!pos) return;
     stage.x(stage.x() + (pos.x - panStart.x));
     stage.y(stage.y() + (pos.y - panStart.y));
     panStart = pos;
+    if (gridVisible) drawGrid();
     stage.batchDraw();
 });
 
 stage.on('mouseup mouseout', () => {
-    if (isPanning) {
-        isPanning = false;
-        stage.container().style.cursor = activeTool === 'select' ? 'default' : 'crosshair';
+    if (!isPanning) return;
+    isPanning = false;
+    // Restore cursor based on active state
+    if (spaceHeld) {
+        stage.container().style.cursor = 'grab';
+    } else {
+        const cursors = { select:'default', hand:'grab', draw:'crosshair', eraser:'crosshair',
+                          line:'crosshair', arrow:'crosshair', rect:'crosshair', ellipse:'crosshair',
+                          text:'text' };
+        stage.container().style.cursor = cursors[activeTool] || 'default';
     }
+});
+
+// Prevent middle-mouse scroll from triggering browser autoscroll
+stage.container().addEventListener('mousedown', ev => {
+    if (ev.button === 1) ev.preventDefault();
 });
 
 // Wheel zoom
@@ -535,8 +599,9 @@ function getCanvasPoint() {
 
 // ════════════════════════════════ MOUSEDOWN ════════════════════════════════
 stage.on('mousedown touchstart', e => {
-    if (activeTool === 'fill') return; // fill handled in makeSelectable click handler
+
     if (activeTool === 'select') return;
+    if (activeTool === 'hand')  return; // hand = pan, not draw
     if (activeTool === 'text') {
         if (e.target === stage) placeText(getCanvasPoint());
         return;
@@ -665,24 +730,6 @@ function makeSelectable(shape) {
     shape.draggable(true);
 
     shape.on('click tap', e => {
-        if (activeTool === 'fill') {
-            e.cancelBubble = true;
-            // Apply solid fill color to this shape
-            if (shape.className === 'Line' || shape.className === 'Arrow') {
-                shape.stroke(currentColor);
-                shape.fill(currentColor);
-            } else if (shape.className === 'Text') {
-                shape.fill(currentColor);
-            } else {
-                // For Rect/Ellipse: update both stroke and fill
-                shape.stroke(currentColor);
-                shape.fill(currentColor);
-            }
-            layer.batchDraw();
-            pushHistory();
-            markDirty();
-            return;
-        }
         if (activeTool !== 'select') return;
         e.cancelBubble = true;
         selectShape(shape);
@@ -703,7 +750,7 @@ function selectShape(shape) {
     layer.batchDraw();
 }
 
-// Deselect when clicking background
+// ─── Stage Click Handler ───────────────────────────────────────────────
 stage.on('click tap', e => {
     if (e.target === stage && activeTool === 'select') {
         transformer.nodes([]);
@@ -810,17 +857,22 @@ function snapshotLayer() {
 }
 
 function pushHistory() {
-    undoStack.push(snapshotLayer());
-    if (undoStack.length > 60) undoStack.shift(); // cap at 60 steps
-    redoStack = [];
+    if (historyIndex < historyList.length - 1) {
+        historyList = historyList.slice(0, historyIndex + 1);
+    }
+    historyList.push(snapshotLayer());
+    if (historyList.length > 60) {
+        historyList.shift();
+    }
+    historyIndex = historyList.length - 1;
     updateUndoRedoBtns();
 }
 
 function updateUndoRedoBtns() {
     const undoBtn = document.getElementById('undo-btn');
     const redoBtn = document.getElementById('redo-btn');
-    if (undoBtn) undoBtn.style.opacity = undoStack.length ? '1' : '0.35';
-    if (redoBtn) redoBtn.style.opacity = redoStack.length ? '1' : '0.35';
+    if (undoBtn) undoBtn.style.opacity = historyIndex > 0 ? '1' : '0.35';
+    if (redoBtn) redoBtn.style.opacity = historyIndex < historyList.length - 1 ? '1' : '0.35';
 }
 
 function restoreSnapshot(json) {
@@ -852,21 +904,21 @@ function restoreSnapshot(json) {
 }
 
 function undoAction() {
-    if (!undoStack.length) return;
-    redoStack.push(snapshotLayer());
-    const prev = undoStack.pop();
-    restoreSnapshot(prev);
-    updateUndoRedoBtns();
-    markDirty();
+    if (historyIndex > 0) {
+        historyIndex--;
+        restoreSnapshot(historyList[historyIndex]);
+        updateUndoRedoBtns();
+        markDirty();
+    }
 }
 
 function redoAction() {
-    if (!redoStack.length) return;
-    undoStack.push(snapshotLayer());
-    const next = redoStack.pop();
-    restoreSnapshot(next);
-    updateUndoRedoBtns();
-    markDirty();
+    if (historyIndex < historyList.length - 1) {
+        historyIndex++;
+        restoreSnapshot(historyList[historyIndex]);
+        updateUndoRedoBtns();
+        markDirty();
+    }
 }
 
 // ════════════════════════════════ GRID ════════════════════════════════
@@ -995,8 +1047,7 @@ setInterval(() => {
     if (isDirty) saveBoard();
 }, 60000);
 
-// Initialise undo/redo button states
-updateUndoRedoBtns();
+// History initialized after loadCanvasState runs below
 
 // ════════════════════════════════ LOAD SAVED STATE (AC-24) ════════════════════════════════
 (function loadCanvasState() {
@@ -1039,6 +1090,9 @@ updateUndoRedoBtns();
         console.error('Failed to restore canvas state:', e);
     }
 })();
+
+// Capture initial state in history
+pushHistory();
 
 // ════════════════════════════════ CSS SPIN ANIMATION ════════════════════════════════
 const styleEl = document.createElement('style');
