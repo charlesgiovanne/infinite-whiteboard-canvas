@@ -368,6 +368,9 @@ document.getElementById('stroke-color').addEventListener('input', e => {
         selectedNodes.forEach(node => {
             if (node.className === 'Line' || node.className === 'Arrow') {
                 node.stroke(currentColor);
+                if (node.className === 'Arrow') {
+                    node.fill(currentColor);
+                }
             } else if (node.className === 'Text') {
                 node.fill(currentColor);
             } else { // Rect, Ellipse
@@ -405,6 +408,10 @@ function applyStrokeToSelected(val) {
         selectedNodes.forEach(node => {
             if (node.className !== 'Text') {
                 node.strokeWidth(val);
+                if (node.className === 'Arrow') {
+                    node.pointerLength(Math.max(10, val * 2.5));
+                    node.pointerWidth(Math.max(8, val * 2));
+                }
             }
         });
         layer.batchDraw();
@@ -580,8 +587,8 @@ stage.on('mousedown touchstart', e => {
             ...sharedAttrs,
             points: [drawStart.x, drawStart.y, drawStart.x, drawStart.y],
             fill: currentColor,
-            pointerLength: 10,
-            pointerWidth: 8,
+            pointerLength: Math.max(10, currentStroke * 2.5),
+            pointerWidth: Math.max(8, currentStroke * 2),
         });
     }
 
@@ -660,15 +667,16 @@ function makeSelectable(shape) {
     shape.on('click tap', e => {
         if (activeTool === 'fill') {
             e.cancelBubble = true;
-            // Apply fill color to this shape
+            // Apply solid fill color to this shape
             if (shape.className === 'Line' || shape.className === 'Arrow') {
                 shape.stroke(currentColor);
+                shape.fill(currentColor);
             } else if (shape.className === 'Text') {
                 shape.fill(currentColor);
             } else {
                 // For Rect/Ellipse: update both stroke and fill
                 shape.stroke(currentColor);
-                shape.fill(currentColor + '44');
+                shape.fill(currentColor);
             }
             layer.batchDraw();
             pushHistory();
