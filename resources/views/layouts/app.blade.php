@@ -38,7 +38,7 @@
     </main>
 
     <!-- Global Notifications / Toasts -->
-    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none">
+    <div id="toast-container" class="fixed bottom-5 right-5 flex flex-col gap-2 pointer-events-none" style="z-index: 9999;">
         @if (session('success'))
             <div class="toast-item pointer-events-auto flex items-center gap-3 bg-emerald-600 text-white px-4 py-3 rounded-xl shadow-lg transform transition-all duration-300 translate-y-0 opacity-100 max-w-sm">
                 <i data-lucide="check-circle" class="w-5 h-5 flex-shrink-0"></i>

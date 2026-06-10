@@ -56,6 +56,7 @@
             ['id'=>'select',    'icon'=>'mouse-pointer-2',  'label'=>'Select (V)'],
             ['id'=>'draw',      'icon'=>'pen-line',         'label'=>'Draw (D)'],
             ['id'=>'eraser',    'icon'=>'eraser',           'label'=>'Eraser (X)'],
+            ['id'=>'fill',      'icon'=>'paint-bucket',     'label'=>'Fill (F)'],
             ['id'=>'rect',      'icon'=>'square',           'label'=>'Rectangle (R)'],
             ['id'=>'ellipse',   'icon'=>'circle',           'label'=>'Ellipse (E)'],
             ['id'=>'line',      'icon'=>'minus',            'label'=>'Line (L)'],
@@ -80,15 +81,11 @@
                 style="width:32px;height:32px;padding:0;border:none;border-radius:8px;cursor:pointer;background:transparent;">
         </div>
 
-        <!-- Stroke Width -->
-        <div style="display:flex;flex-direction:column;gap:3px;align-items:center;" title="Stroke Width">
-            @foreach([['thin','2','Thin'],['medium','4','Medium'],['thick','8','Thick']] as $sw)
-            <button class="stroke-btn" data-sw="{{ $sw[1] }}" title="{{ $sw[2] }}"
-                style="width:32px;height:20px;border:none;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;border-radius:6px;transition:background 0.15s;"
-                onclick="setStrokeWidth({{ $sw[1] }})">
-                <div style="width:18px;height:{{ $sw[1] == '2' ? '2' : ($sw[1] == '4' ? '3' : '5') }}px;background:#64748b;border-radius:9px;transition:background 0.15s;"></div>
-            </button>
-            @endforeach
+        <!-- Stroke Width Slider -->
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px;width:100%;margin-top:6px;" title="Stroke Width">
+            <span id="stroke-val-display" style="font-size:11px;font-weight:700;color:#64748b;font-family:'Inter',sans-serif;">4px</span>
+            <input type="range" id="stroke-slider" min="1" max="40" value="4"
+                style="width:36px;height:4px;background:#cbd5e1;border-radius:2px;appearance:none;outline:none;cursor:pointer;">
         </div>
     </div>
 
@@ -186,7 +183,7 @@ function setActiveTool(tool) {
     const isPannable = (tool === 'select');
     stage.container().style.cursor = (tool === 'draw' || tool === 'eraser' || tool === 'line' || tool === 'arrow')
         ? 'crosshair'
-        : (tool === 'text' ? 'text' : (isPannable ? 'default' : 'crosshair'));
+        : (tool === 'text' ? 'text' : (tool === 'fill' ? 'pointer' : (isPannable ? 'default' : 'crosshair')));
 
     if (tool !== 'select') {
         transformer.nodes([]);
@@ -196,14 +193,52 @@ function setActiveTool(tool) {
 
 function setStrokeWidth(w) {
     currentStroke = w;
-    document.querySelectorAll('.stroke-btn').forEach(btn => {
-        const active = parseInt(btn.dataset.sw) === w;
-        btn.style.background = active ? '#eef2ff' : 'transparent';
-    });
+    const slider = document.getElementById('stroke-slider');
+    const display = document.getElementById('stroke-val-display');
+    if (slider) slider.value = w;
+    if (display) display.textContent = w + 'px';
 }
 
 document.getElementById('stroke-color').addEventListener('input', e => {
     currentColor = e.target.value;
+    
+    // Also update selected shapes' colors
+    const selectedNodes = transformer.nodes();
+    if (selectedNodes.length > 0) {
+        selectedNodes.forEach(node => {
+            if (node.className === 'Line' || node.className === 'Arrow') {
+                node.stroke(currentColor);
+            } else if (node.className === 'Text') {
+                node.fill(currentColor);
+            } else { // Rect, Ellipse
+                node.stroke(currentColor);
+                if (node.fill()) {
+                    node.fill(currentColor + '22');
+                }
+            }
+        });
+        layer.batchDraw();
+        markDirty();
+    }
+});
+
+// Stroke slider input listener
+document.getElementById('stroke-slider').addEventListener('input', e => {
+    const val = parseInt(e.target.value);
+    currentStroke = val;
+    document.getElementById('stroke-val-display').textContent = val + 'px';
+
+    // Also update selected shapes' stroke widths
+    const selectedNodes = transformer.nodes();
+    if (selectedNodes.length > 0) {
+        selectedNodes.forEach(node => {
+            if (node.className !== 'Text') {
+                node.strokeWidth(val);
+            }
+        });
+        layer.batchDraw();
+        markDirty();
+    }
 });
 
 // Set initial active tool highlight
@@ -217,6 +252,7 @@ document.addEventListener('keydown', e => {
         case 'v': setActiveTool('select'); break;
         case 'd': setActiveTool('draw');   break;
         case 'x': setActiveTool('eraser'); break;
+        case 'f': setActiveTool('fill');   break;
         case 'r': setActiveTool('rect');   break;
         case 'e': setActiveTool('ellipse');break;
         case 'l': setActiveTool('line');   break;
@@ -317,6 +353,19 @@ function getCanvasPoint() {
 
 // ════════════════════════════════ MOUSEDOWN ════════════════════════════════
 stage.on('mousedown touchstart', e => {
+    if (activeTool === 'fill') {
+        const shape = e.target;
+        if (shape && shape !== stage && shape.className !== 'Transformer') {
+            if (shape.className === 'Line' || shape.className === 'Arrow') {
+                shape.stroke(currentColor);
+            } else {
+                shape.fill(currentColor);
+            }
+            layer.batchDraw();
+            markDirty();
+        }
+        return;
+    }
     if (activeTool === 'select') return;
     if (activeTool === 'text') {
         if (e.target === stage) placeText(getCanvasPoint());
