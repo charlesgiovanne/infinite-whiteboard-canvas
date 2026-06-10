@@ -81,13 +81,43 @@
                 style="width:32px;height:32px;padding:0;border:none;border-radius:8px;cursor:pointer;background:transparent;">
         </div>
 
-        <!-- Stroke Width Slider -->
-        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;width:100%;margin-top:4px;" title="Stroke Width (drag to adjust)">
-            <span id="stroke-val-display" style="font-size:10px;font-weight:700;color:#64748b;font-family:'Inter',sans-serif;letter-spacing:0.02em;">4px</span>
-            <div style="height:80px;display:flex;align-items:center;justify-content:center;">
-                <input type="range" id="stroke-slider" min="1" max="40" value="4"
-                    title="Stroke Width"
-                    style="width:70px;height:4px;cursor:pointer;writing-mode:vertical-lr;direction:rtl;appearance:slider-vertical;-webkit-appearance:slider-vertical;accent-color:#6366f1;outline:none;border:none;background:transparent;">
+        <!-- Stroke Width Control -->
+        <div style="position:relative;">
+            <button id="size-btn" title="Stroke / Brush Size"
+                style="width:40px;height:40px;border:none;background:transparent;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:2px;color:#64748b;transition:all 0.15s;"
+                onclick="toggleSizePanel(event)"
+                onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='transparent'">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                    <line x1="3" y1="12" x2="21" y2="12"/>
+                    <line x1="3" y1="6" x2="15" y2="6" stroke-width="1"/>
+                    <line x1="3" y1="18" x2="18" y2="18" stroke-width="3"/>
+                </svg>
+                <span id="size-badge" style="font-size:9px;font-weight:700;color:#6366f1;font-family:'Inter',sans-serif;line-height:1;">4</span>
+            </button>
+
+            <!-- Floating Size Panel -->
+            <div id="size-panel"
+                style="display:none;position:fixed;z-index:9000;background:rgba(255,255,255,0.98);backdrop-filter:blur(16px);
+                       border:1px solid rgba(0,0,0,0.10);border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,0.15);
+                       padding:16px 18px;min-width:200px;">
+                <div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:12px;">
+                    Stroke / Brush Size
+                </div>
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <input type="range" id="stroke-slider" min="1" max="1000" value="4"
+                        style="flex:1;accent-color:#6366f1;cursor:pointer;height:4px;">
+                    <input type="number" id="stroke-number" min="1" max="1000" value="4"
+                        style="width:56px;padding:4px 6px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-weight:600;color:#1e293b;text-align:center;outline:none;font-family:'Inter',sans-serif;"
+                        onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='#e2e8f0'">
+                </div>
+                <div style="margin-top:10px;display:flex;gap:6px;">
+                    @foreach([1,2,4,8,16,32] as $preset)
+                    <button onclick="setStrokeWidth({{ $preset }});" title="{{ $preset }}px"
+                        style="flex:1;padding:4px 0;border:1.5px solid #e2e8f0;border-radius:6px;font-size:11px;font-weight:700;color:#64748b;background:transparent;cursor:pointer;transition:all 0.15s;"
+                        onmouseover="this.style.background='#eef2ff';this.style.borderColor='#6366f1';this.style.color='#6366f1';"
+                        onmouseout="this.style.background='transparent';this.style.borderColor='#e2e8f0';this.style.color='#64748b';">{{ $preset }}</button>
+                    @endforeach
+                </div>
             </div>
         </div>
     </div>
@@ -195,12 +225,36 @@ function setActiveTool(tool) {
 }
 
 function setStrokeWidth(w) {
+    w = Math.max(1, Math.min(1000, parseInt(w) || 1));
     currentStroke = w;
     const slider = document.getElementById('stroke-slider');
-    const display = document.getElementById('stroke-val-display');
+    const numInput = document.getElementById('stroke-number');
+    const badge = document.getElementById('size-badge');
     if (slider) slider.value = w;
-    if (display) display.textContent = w + 'px';
+    if (numInput) numInput.value = w;
+    if (badge) badge.textContent = w > 999 ? '999+' : w;
 }
+
+function toggleSizePanel(e) {
+    e.stopPropagation();
+    const panel = document.getElementById('size-panel');
+    const btn   = document.getElementById('size-btn');
+    if (panel.style.display === 'none' || panel.style.display === '') {
+        // Position panel to the right of the toolbar button
+        const rect = btn.getBoundingClientRect();
+        panel.style.left = (rect.right + 10) + 'px';
+        panel.style.top  = Math.min(rect.top, window.innerHeight - 160) + 'px';
+        panel.style.display = 'block';
+    } else {
+        panel.style.display = 'none';
+    }
+}
+
+// Close size panel when clicking elsewhere
+document.addEventListener('click', () => {
+    const panel = document.getElementById('size-panel');
+    if (panel) panel.style.display = 'none';
+});
 
 document.getElementById('stroke-color').addEventListener('input', e => {
     currentColor = e.target.value;
@@ -227,11 +281,22 @@ document.getElementById('stroke-color').addEventListener('input', e => {
 
 // Stroke slider input listener
 document.getElementById('stroke-slider').addEventListener('input', e => {
-    const val = parseInt(e.target.value);
-    currentStroke = val;
-    document.getElementById('stroke-val-display').textContent = val + 'px';
+    setStrokeWidth(parseInt(e.target.value));
+    applyStrokeToSelected(currentStroke);
+});
 
-    // Also update selected shapes' stroke widths
+// Stroke number input listener
+document.getElementById('stroke-number').addEventListener('input', e => {
+    const val = Math.max(1, Math.min(1000, parseInt(e.target.value) || 1));
+    setStrokeWidth(val);
+    applyStrokeToSelected(currentStroke);
+});
+
+document.getElementById('stroke-number').addEventListener('keydown', e => {
+    e.stopPropagation(); // prevent canvas keyboard shortcuts when typing
+});
+
+function applyStrokeToSelected(val) {
     const selectedNodes = transformer.nodes();
     if (selectedNodes.length > 0) {
         selectedNodes.forEach(node => {
@@ -242,7 +307,7 @@ document.getElementById('stroke-slider').addEventListener('input', e => {
         layer.batchDraw();
         markDirty();
     }
-});
+}
 
 // Set initial active tool highlight
 setActiveTool('select');
@@ -356,19 +421,7 @@ function getCanvasPoint() {
 
 // ════════════════════════════════ MOUSEDOWN ════════════════════════════════
 stage.on('mousedown touchstart', e => {
-    if (activeTool === 'fill') {
-        const shape = e.target;
-        if (shape && shape !== stage && shape.className !== 'Transformer') {
-            if (shape.className === 'Line' || shape.className === 'Arrow') {
-                shape.stroke(currentColor);
-            } else {
-                shape.fill(currentColor);
-            }
-            layer.batchDraw();
-            markDirty();
-        }
-        return;
-    }
+    if (activeTool === 'fill') return; // fill handled in makeSelectable click handler
     if (activeTool === 'select') return;
     if (activeTool === 'text') {
         if (e.target === stage) placeText(getCanvasPoint());
@@ -497,6 +550,22 @@ function makeSelectable(shape) {
     shape.draggable(true);
 
     shape.on('click tap', e => {
+        if (activeTool === 'fill') {
+            e.cancelBubble = true;
+            // Apply fill color to this shape
+            if (shape.className === 'Line' || shape.className === 'Arrow') {
+                shape.stroke(currentColor);
+            } else if (shape.className === 'Text') {
+                shape.fill(currentColor);
+            } else {
+                // For Rect/Ellipse: update both stroke and fill
+                shape.stroke(currentColor);
+                shape.fill(currentColor + '44');
+            }
+            layer.batchDraw();
+            markDirty();
+            return;
+        }
         if (activeTool !== 'select') return;
         e.cancelBubble = true;
         selectShape(shape);
