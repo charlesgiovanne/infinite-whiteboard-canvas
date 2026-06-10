@@ -142,7 +142,8 @@
             <div id="size-panel"
                 style="display:none;position:fixed;z-index:9000;background:rgba(255,255,255,0.98);backdrop-filter:blur(16px);
                        border:1px solid rgba(0,0,0,0.10);border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,0.15);
-                       padding:16px 18px;min-width:200px;">
+                       padding:16px 18px;min-width:200px;"
+                onclick="event.stopPropagation()">
                 <div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:12px;">
                     Stroke / Brush Size
                 </div>
@@ -310,7 +311,7 @@ function toggleSizePanel(e) {
             left = rect.left - panelW - margin;
         }
         // Clamp vertically
-        let top = rect.top;
+        let top = rect.top - panelH + 30; // Position slightly above the size button (bottom overlaps button slightly)
         if (top + panelH > vh - margin) {
             top = vh - panelH - margin;
         }
