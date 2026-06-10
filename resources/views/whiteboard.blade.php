@@ -34,6 +34,49 @@
             <span id="save-status-text">All changes saved</span>
         </div>
 
+        <div style="width:1px;height:20px;background:#e2e8f0;"></div>
+
+        <!-- Undo / Redo -->
+        <button id="undo-btn" onclick="undoAction()" title="Undo (Ctrl+Z)"
+            style="width:32px;height:32px;border:none;background:transparent;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#475569;transition:background 0.15s;"
+            onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='transparent'">
+            <i data-lucide="undo-2" style="width:15px;height:15px;"></i>
+        </button>
+        <button id="redo-btn" onclick="redoAction()" title="Redo (Ctrl+Y)"
+            style="width:32px;height:32px;border:none;background:transparent;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#475569;transition:background 0.15s;"
+            onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='transparent'">
+            <i data-lucide="redo-2" style="width:15px;height:15px;"></i>
+        </button>
+
+        <div style="width:1px;height:20px;background:#e2e8f0;"></div>
+
+        <!-- Grid Toggle -->
+        <button id="grid-btn" onclick="toggleGrid()" title="Toggle Grid"
+            style="width:32px;height:32px;border:none;background:transparent;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#475569;transition:background 0.15s;"
+            onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='transparent'">
+            <i data-lucide="grid" style="width:15px;height:15px;"></i>
+        </button>
+
+        <div style="width:1px;height:20px;background:#e2e8f0;"></div>
+
+        <!-- Export Dropdown -->
+        <div style="position:relative;">
+            <button id="export-btn" onclick="toggleExportMenu(event)" title="Export Canvas"
+                style="display:flex;align-items:center;gap:5px;padding:6px 10px;border:none;background:transparent;border-radius:8px;cursor:pointer;color:#475569;font-size:12px;font-weight:600;transition:background 0.15s;font-family:'Inter',sans-serif;"
+                onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='transparent'">
+                <i data-lucide="download" style="width:15px;height:15px;"></i>
+                Export
+            </button>
+            <div id="export-menu" style="display:none;position:fixed;z-index:9500;background:rgba(255,255,255,0.98);backdrop-filter:blur(16px);border:1px solid rgba(0,0,0,0.10);border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.15);padding:6px;min-width:140px;">
+                <button onclick="exportCanvas('png')" style="width:100%;display:flex;align-items:center;gap:8px;padding:8px 10px;border:none;background:transparent;border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;color:#1e293b;text-align:left;transition:background 0.15s;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='transparent'">
+                    <i data-lucide="image" style="width:14px;height:14px;color:#6366f1;"></i> Save as PNG
+                </button>
+                <button onclick="exportCanvas('jpeg')" style="width:100%;display:flex;align-items:center;gap:8px;padding:8px 10px;border:none;background:transparent;border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;color:#1e293b;text-align:left;transition:background 0.15s;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='transparent'">
+                    <i data-lucide="file-image" style="width:14px;height:14px;color:#f59e0b;"></i> Save as JPEG
+                </button>
+            </div>
+        </div>
+
         <!-- Manual Save Button -->
         <button id="save-btn" onclick="saveBoard()"
             style="display:flex;align-items:center;gap:6px;padding:7px 14px;background:#6366f1;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s;font-family:'Inter',sans-serif;"
@@ -165,6 +208,10 @@ let currentColor   = '#6366f1';
 let currentStroke  = 4;
 let activeTool     = 'select';
 let isDirty        = false;  // tracks unsaved changes
+let undoStack      = [];     // undo history (JSON snapshots)
+let redoStack      = [];     // redo history
+let gridVisible    = false;  // grid overlay toggle
+const GRID_SIZE    = 30;     // grid cell size in px
 
 // Alias Konva.Stage.create to satisfy exam requirements (AC-24)
 if (typeof Konva !== 'undefined' && !Konva.Stage.create) {
@@ -179,6 +226,10 @@ const stage = new Konva.Stage({
     height: window.innerHeight,
     draggable: false,
 });
+
+// Grid layer (rendered below drawing layer)
+const gridLayer = new Konva.Layer({ listening: false });
+stage.add(gridLayer);
 
 const layer = new Konva.Layer();
 stage.add(layer);
@@ -240,21 +291,72 @@ function toggleSizePanel(e) {
     const panel = document.getElementById('size-panel');
     const btn   = document.getElementById('size-btn');
     if (panel.style.display === 'none' || panel.style.display === '') {
-        // Position panel to the right of the toolbar button
+        // First show off-screen to measure dimensions
+        panel.style.visibility = 'hidden';
+        panel.style.display = 'block';
+        const panelW = panel.offsetWidth  || 220;
+        const panelH = panel.offsetHeight || 160;
+        panel.style.display = 'none';
+        panel.style.visibility = '';
+
         const rect = btn.getBoundingClientRect();
-        panel.style.left = (rect.right + 10) + 'px';
-        panel.style.top  = Math.min(rect.top, window.innerHeight - 160) + 'px';
+        const margin = 10;
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+
+        // Prefer right side of toolbar; fall back to left if no room
+        let left = rect.right + margin;
+        if (left + panelW > vw - margin) {
+            left = rect.left - panelW - margin;
+        }
+        // Clamp vertically
+        let top = rect.top;
+        if (top + panelH > vh - margin) {
+            top = vh - panelH - margin;
+        }
+        top = Math.max(margin, top);
+
+        panel.style.left = left + 'px';
+        panel.style.top  = top  + 'px';
         panel.style.display = 'block';
     } else {
         panel.style.display = 'none';
     }
 }
 
-// Close size panel when clicking elsewhere
+// Close size panel / export menu when clicking elsewhere
 document.addEventListener('click', () => {
     const panel = document.getElementById('size-panel');
     if (panel) panel.style.display = 'none';
+    const menu = document.getElementById('export-menu');
+    if (menu) menu.style.display = 'none';
 });
+
+function toggleExportMenu(e) {
+    e.stopPropagation();
+    const menu = document.getElementById('export-menu');
+    const btn  = document.getElementById('export-btn');
+    if (menu.style.display === 'none' || menu.style.display === '') {
+        menu.style.visibility = 'hidden';
+        menu.style.display = 'block';
+        const mW = menu.offsetWidth  || 150;
+        const mH = menu.offsetHeight || 100;
+        menu.style.display = 'none';
+        menu.style.visibility = '';
+        const rect = btn.getBoundingClientRect();
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        let left = rect.left;
+        if (left + mW > vw - 10) left = vw - mW - 10;
+        let top = rect.bottom + 6;
+        if (top + mH > vh - 10) top = rect.top - mH - 6;
+        menu.style.left = left + 'px';
+        menu.style.top  = top  + 'px';
+        menu.style.display = 'block';
+    } else {
+        menu.style.display = 'none';
+    }
+}
 
 document.getElementById('stroke-color').addEventListener('input', e => {
     currentColor = e.target.value;
@@ -316,6 +418,10 @@ setStrokeWidth(4);
 // Keyboard shortcuts
 document.addEventListener('keydown', e => {
     if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
+    // Ctrl+Z = Undo, Ctrl+Y or Ctrl+Shift+Z = Redo
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); undoAction(); return; }
+    if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) { e.preventDefault(); redoAction(); return; }
+    if (e.ctrlKey || e.metaKey) return; // ignore other Ctrl combos
     switch(e.key.toLowerCase()) {
         case 'v': setActiveTool('select'); break;
         case 'd': setActiveTool('draw');   break;
@@ -541,6 +647,7 @@ stage.on('mouseup touchend', () => {
         currentShape.draggable(false);
     }
     currentShape = null;
+    pushHistory();
     markDirty();
     layer.batchDraw();
 });
@@ -563,6 +670,7 @@ function makeSelectable(shape) {
                 shape.fill(currentColor + '44');
             }
             layer.batchDraw();
+            pushHistory();
             markDirty();
             return;
         }
@@ -571,9 +679,9 @@ function makeSelectable(shape) {
         selectShape(shape);
     });
 
-    shape.on('dragend', () => markDirty());
+    shape.on('dragend', () => { markDirty(); pushHistory(); });
 
-    shape.on('transformend', () => markDirty());
+    shape.on('transformend', () => { markDirty(); pushHistory(); });
 
     // Double click text to edit
     if (shape.className === 'Text') {
@@ -598,6 +706,7 @@ stage.on('click tap', e => {
 function deleteSelected() {
     const nodes = transformer.nodes();
     if (!nodes.length) return;
+    pushHistory();
     nodes.forEach(n => n.destroy());
     transformer.nodes([]);
     layer.batchDraw();
@@ -621,6 +730,7 @@ function placeText(pos) {
     layer.add(node);
     makeSelectable(node);
     layer.batchDraw();
+    pushHistory();
     markDirty();
     // Immediately open editor
     editText(node);
@@ -679,6 +789,135 @@ textEditor.addEventListener('keydown', e => {
 });
 
 textEditor.addEventListener('blur', commitText);
+
+// ════════════════════════════════ UNDO / REDO ════════════════════════════════
+function snapshotLayer() {
+    // Serialize only non-eraser, non-transformer shapes
+    const trNodes = transformer.nodes();
+    transformer.nodes([]);
+    const json = stage.toJSON();
+    transformer.nodes(trNodes);
+    return json;
+}
+
+function pushHistory() {
+    undoStack.push(snapshotLayer());
+    if (undoStack.length > 60) undoStack.shift(); // cap at 60 steps
+    redoStack = [];
+    updateUndoRedoBtns();
+}
+
+function updateUndoRedoBtns() {
+    const undoBtn = document.getElementById('undo-btn');
+    const redoBtn = document.getElementById('redo-btn');
+    if (undoBtn) undoBtn.style.opacity = undoStack.length ? '1' : '0.35';
+    if (redoBtn) redoBtn.style.opacity = redoStack.length ? '1' : '0.35';
+}
+
+function restoreSnapshot(json) {
+    // Clear all current shapes (leave transformer & grid)
+    const shapes = [...layer.getChildren()];
+    shapes.forEach(s => { if (s !== transformer) s.destroy(); });
+
+    const tempDiv = document.createElement('div');
+    tempDiv.style.cssText = 'position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;visibility:hidden;';
+    document.body.appendChild(tempDiv);
+    const restoredStage = Konva.Stage.create(json, tempDiv);
+    restoredStage.getLayers().forEach(restoredLayer => {
+        const shapesArr = [...restoredLayer.getChildren()];
+        shapesArr.forEach(shape => {
+            if (shape.className === 'Transformer') return;
+            shape.moveTo(layer);
+            if (shape.globalCompositeOperation && shape.globalCompositeOperation() === 'destination-out') {
+                shape.draggable(false);
+            } else {
+                shape.draggable(true);
+                makeSelectable(shape);
+            }
+        });
+    });
+    restoredStage.destroy();
+    document.body.removeChild(tempDiv);
+    layer.add(transformer);
+    layer.batchDraw();
+}
+
+function undoAction() {
+    if (!undoStack.length) return;
+    redoStack.push(snapshotLayer());
+    const prev = undoStack.pop();
+    restoreSnapshot(prev);
+    updateUndoRedoBtns();
+    markDirty();
+}
+
+function redoAction() {
+    if (!redoStack.length) return;
+    undoStack.push(snapshotLayer());
+    const next = redoStack.pop();
+    restoreSnapshot(next);
+    updateUndoRedoBtns();
+    markDirty();
+}
+
+// ════════════════════════════════ GRID ════════════════════════════════
+function drawGrid() {
+    gridLayer.destroyChildren();
+    const w = stage.width()  / stage.scaleX();
+    const h = stage.height() / stage.scaleY();
+    const ox = -stage.x() / stage.scaleX();
+    const oy = -stage.y() / stage.scaleY();
+    const startX = Math.floor(ox / GRID_SIZE) * GRID_SIZE;
+    const startY = Math.floor(oy / GRID_SIZE) * GRID_SIZE;
+    for (let x = startX; x < ox + w + GRID_SIZE; x += GRID_SIZE) {
+        gridLayer.add(new Konva.Line({ points: [x, oy, x, oy + h + GRID_SIZE], stroke: '#c7d2fe', strokeWidth: 0.5, listening: false }));
+    }
+    for (let y = startY; y < oy + h + GRID_SIZE; y += GRID_SIZE) {
+        gridLayer.add(new Konva.Line({ points: [ox, y, ox + w + GRID_SIZE, y], stroke: '#c7d2fe', strokeWidth: 0.5, listening: false }));
+    }
+    gridLayer.batchDraw();
+}
+
+function toggleGrid() {
+    gridVisible = !gridVisible;
+    const btn = document.getElementById('grid-btn');
+    if (gridVisible) {
+        drawGrid();
+        if (btn) { btn.style.background = '#eef2ff'; btn.style.color = '#6366f1'; }
+    } else {
+        gridLayer.destroyChildren();
+        gridLayer.batchDraw();
+        if (btn) { btn.style.background = 'transparent'; btn.style.color = '#475569'; }
+    }
+}
+
+// Redraw grid on pan/zoom
+stage.on('dragmove wheel', () => { if (gridVisible) drawGrid(); });
+
+// ════════════════════════════════ EXPORT ════════════════════════════════
+function exportCanvas(format) {
+    document.getElementById('export-menu').style.display = 'none';
+    const trNodes = transformer.nodes();
+    transformer.nodes([]);
+    // Hide grid temporarily
+    gridLayer.visible(false);
+
+    const dataURL = stage.toDataURL({
+        mimeType: format === 'jpeg' ? 'image/jpeg' : 'image/png',
+        quality:  format === 'jpeg' ? 0.92 : 1,
+        pixelRatio: window.devicePixelRatio || 1,
+    });
+
+    gridLayer.visible(gridVisible);
+    transformer.nodes(trNodes);
+
+    const link = document.createElement('a');
+    const boardName = document.getElementById('board-name-display').textContent.trim().replace(/\s+/g, '_') || 'whiteboard';
+    link.download = `${boardName}.${format}`;
+    link.href = dataURL;
+    link.click();
+    showToast(`Exported as ${format.toUpperCase()}!`, 'success');
+}
 
 // ════════════════════════════════ DIRTY / SAVE ════════════════════════════════
 function markDirty() {
@@ -746,6 +985,9 @@ async function saveBoard() {
 setInterval(() => {
     if (isDirty) saveBoard();
 }, 60000);
+
+// Initialise undo/redo button states
+updateUndoRedoBtns();
 
 // ════════════════════════════════ LOAD SAVED STATE (AC-24) ════════════════════════════════
 (function loadCanvasState() {
