@@ -55,6 +55,7 @@
         $tools = [
             ['id'=>'select',    'icon'=>'mouse-pointer-2',  'label'=>'Select (V)'],
             ['id'=>'draw',      'icon'=>'pen-line',         'label'=>'Draw (D)'],
+            ['id'=>'eraser',    'icon'=>'eraser',           'label'=>'Eraser (X)'],
             ['id'=>'rect',      'icon'=>'square',           'label'=>'Rectangle (R)'],
             ['id'=>'ellipse',   'icon'=>'circle',           'label'=>'Ellipse (E)'],
             ['id'=>'line',      'icon'=>'minus',            'label'=>'Line (L)'],
@@ -183,7 +184,7 @@ function setActiveTool(tool) {
 
     // Update stage cursor and draggability
     const isPannable = (tool === 'select');
-    stage.container().style.cursor = (tool === 'draw' || tool === 'line' || tool === 'arrow')
+    stage.container().style.cursor = (tool === 'draw' || tool === 'eraser' || tool === 'line' || tool === 'arrow')
         ? 'crosshair'
         : (tool === 'text' ? 'text' : (isPannable ? 'default' : 'crosshair'));
 
@@ -215,6 +216,7 @@ document.addEventListener('keydown', e => {
     switch(e.key.toLowerCase()) {
         case 'v': setActiveTool('select'); break;
         case 'd': setActiveTool('draw');   break;
+        case 'x': setActiveTool('eraser'); break;
         case 'r': setActiveTool('rect');   break;
         case 'e': setActiveTool('ellipse');break;
         case 'l': setActiveTool('line');   break;
@@ -333,10 +335,13 @@ stage.on('mousedown touchstart', e => {
         draggable: false,
     };
 
-    if (activeTool === 'draw') {
+    if (activeTool === 'draw' || activeTool === 'eraser') {
         currentShape = new Konva.Line({
             ...sharedAttrs,
             points: freePoints,
+            globalCompositeOperation: activeTool === 'eraser' ? 'destination-out' : 'source-over',
+            stroke: activeTool === 'eraser' ? '#000000' : currentColor,
+            strokeWidth: activeTool === 'eraser' ? currentStroke * 2.5 : currentStroke,
         });
     } else if (activeTool === 'rect') {
         currentShape = new Konva.Rect({
@@ -378,7 +383,7 @@ stage.on('mousemove touchmove', () => {
     if (!isDrawing || !currentShape) return;
     const pos = getCanvasPoint();
 
-    if (activeTool === 'draw') {
+    if (activeTool === 'draw' || activeTool === 'eraser') {
         freePoints = freePoints.concat([pos.x, pos.y]);
         currentShape.points(freePoints);
     } else if (activeTool === 'rect') {
@@ -424,8 +429,12 @@ stage.on('mouseup touchend', () => {
         }
     }
 
-    // Make shape selectable
-    makeSelectable(currentShape);
+    // Make shape selectable unless it is an eraser path
+    if (currentShape.globalCompositeOperation() !== 'destination-out') {
+        makeSelectable(currentShape);
+    } else {
+        currentShape.draggable(false);
+    }
     currentShape = null;
     markDirty();
     layer.batchDraw();
@@ -638,8 +647,12 @@ setInterval(() => {
             shapes.forEach(shape => {
                 if (shape.className === 'Transformer') return;
                 shape.moveTo(layer);
-                shape.draggable(true);
-                makeSelectable(shape);
+                if (shape.globalCompositeOperation() === 'destination-out') {
+                    shape.draggable(false);
+                } else {
+                    shape.draggable(true);
+                    makeSelectable(shape);
+                }
             });
         });
 
