@@ -304,18 +304,18 @@
     window.addEventListener('resize', resize);
 
     const blobs = [
-        { x: 0.2, y: 0.3, r: 0.38, color: '#6366f1', vx: 0.00015, vy: 0.00018, phase: 0 },
-        { x: 0.7, y: 0.2, r: 0.30, color: '#8b5cf6', vx: -0.00012, vy: 0.00020, phase: 1.1 },
-        { x: 0.5, y: 0.7, r: 0.34, color: '#ec4899', vx: 0.00018, vy: -0.00014, phase: 2.3 },
-        { x: 0.15, y: 0.75, r: 0.25, color: '#06b6d4', vx: -0.00016, vy: -0.00016, phase: 3.7 },
-        { x: 0.85, y: 0.6, r: 0.28, color: '#f59e0b', vx: 0.00013, vy: 0.00022, phase: 5.1 },
+        { x: 0.2, y: 0.3, r: 0.38, color: '#6366f1', vx: 0.000018, vy: 0.000022, phase: 0 },
+        { x: 0.7, y: 0.2, r: 0.30, color: '#8b5cf6', vx: -0.000015, vy: 0.000025, phase: 1.1 },
+        { x: 0.5, y: 0.7, r: 0.34, color: '#ec4899', vx: 0.000022, vy: -0.000017, phase: 2.3 },
+        { x: 0.15, y: 0.75, r: 0.25, color: '#06b6d4', vx: -0.000020, vy: -0.000020, phase: 3.7 },
+        { x: 0.85, y: 0.6, r: 0.28, color: '#f59e0b', vx: 0.000016, vy: 0.000027, phase: 5.1 },
     ];
 
     let t = 0;
 
     function drawBlobs() {
         ctx.clearRect(0, 0, W, H);
-        t += 1;
+        t += 0.3;
         blobs.forEach(b => {
             const bx = (0.5 + 0.38 * Math.sin(t * b.vx * 1000 + b.phase)) * W;
             const by = (0.5 + 0.38 * Math.cos(t * b.vy * 1000 + b.phase * 0.7)) * H;

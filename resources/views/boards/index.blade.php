@@ -15,13 +15,15 @@
             </div>
             <p class="text-slate-500 text-base ml-[52px]">{{ $boards->count() }} {{ Str::plural('board', $boards->count()) }} — draw, sketch, and create freely</p>
         </div>
-        <button onclick="openModal('new-board-modal')" id="new-board-btn"
-            style="display:inline-flex;align-items:center;gap:8px;padding:12px 24px;background:#6366f1;color:#fff;border:none;border-radius:14px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 14px rgba(99,102,241,0.35);transition:all 0.2s;font-family:'Inter',sans-serif;"
-            onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 24px rgba(99,102,241,0.4)'"
-            onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 4px 14px rgba(99,102,241,0.35)'">
-            <i data-lucide="plus" style="width:18px;height:18px;"></i>
-            New Board
-        </button>
+        <a href="{{ route('home') }}"
+            style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;background:rgba(255,255,255,0.8);color:#475569;border:1.5px solid #e2e8f0;border-radius:14px;font-size:13px;font-weight:600;cursor:pointer;text-decoration:none;backdrop-filter:blur(8px);transition:all 0.2s;font-family:'Inter',sans-serif;"
+            onmouseover="this.style.borderColor='#6366f1';this.style.color='#6366f1';this.style.background='#eef2ff'"
+            onmouseout="this.style.borderColor='#e2e8f0';this.style.color='#475569';this.style.background='rgba(255,255,255,0.8)'">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 12H5"/><path d="m12 19-7-7 7-7"/>
+            </svg>
+            Home
+        </a>
     </div>
 
     <!-- Grid Layout -->
