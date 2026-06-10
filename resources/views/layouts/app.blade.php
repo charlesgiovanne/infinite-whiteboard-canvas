@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ config('app.name', 'Infinite Whiteboard') }}</title>
+    <meta name="description" content="Infinite Canvas Whiteboard — draw freehand, add shapes, text, and arrows on an infinite canvas. Save and manage multiple whiteboards.">
+    <meta name="keywords" content="whiteboard, canvas, drawing, infinite canvas, shapes, freehand">
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
     <!-- Google Fonts: Outfit & Inter -->
